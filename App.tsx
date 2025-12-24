@@ -17,15 +17,17 @@ import {
 } from './services/telegramService';
 
 const App: React.FC = () => {
-  // بارگذاری داده‌ها از دیتابیس رمزنگاری شده
+  // ۱. بارگذاری وضعیت احراز هویت
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return SecureDB.load('auth_status') === true;
   });
   
+  // ۲. بارگذاری پروفایل کاربر (شامل تنظیمات تلگرام)
   const [user, setUser] = useState<User | null>(() => {
     return SecureDB.load('user_profile');
   });
 
+  // ۳. بارگذاری دیتابیس چک‌ها
   const [checks, setChecks] = useState<Check[]>(() => {
     return SecureDB.load('checks_master') || [];
   });
@@ -34,21 +36,22 @@ const App: React.FC = () => {
     return SecureDB.load('notifs_stream') || [];
   });
 
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // همگام‌سازی خودکار و رمزنگاری شده با هر تغییر
+  // سینک کردن دائمی داده‌ها با دیتابیس رمزنگاری شده (فقط اگر داده معتبر باشد)
   useEffect(() => {
-    SecureDB.save('checks_master', checks);
+    if (checks.length > 0) SecureDB.save('checks_master', checks);
   }, [checks]);
 
   useEffect(() => {
-    SecureDB.save('notifs_stream', notifications);
+    if (notifications.length > 0) SecureDB.save('notifs_stream', notifications);
   }, [notifications]);
 
   useEffect(() => {
     SecureDB.save('auth_status', isAuthenticated);
-    SecureDB.save('user_profile', user);
+    if (user) {
+      SecureDB.save('user_profile', user);
+    }
   }, [isAuthenticated, user]);
 
   const dispatchTelegram = useCallback((message: string) => {
@@ -95,19 +98,27 @@ const App: React.FC = () => {
     if (user) {
       const updatedUser = { ...user, telegram: config };
       setUser(updatedUser);
-      // ذخیره آنی در دیتابیس رمزنگاری شده
       SecureDB.save('user_profile', updatedUser);
     }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    setUser(null);
-    SecureDB.clear();
+    // ما یوزر را null نمی‌کنیم تا اطلاعاتش در حافظه SecureDB بماند
+    SecureDB.clearSession();
     window.location.reload();
   };
 
-  if (!isAuthenticated) return <Login onLogin={(u) => { setIsAuthenticated(true); setUser(u); }} />;
+  if (!isAuthenticated) return <Login onLogin={(u) => { 
+    // هنگام لاگین، اگر دیتابیسی از قبل بود، آن را با اطلاعات لاگین ترکیب کن
+    const existingUser = SecureDB.load('user_profile');
+    if (existingUser) {
+        setUser(existingUser);
+    } else {
+        setUser(u);
+    }
+    setIsAuthenticated(true); 
+  }} />;
 
   return (
     <HashRouter>
@@ -129,18 +140,18 @@ const App: React.FC = () => {
             </div>
           </div>
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            <SidebarLink to="/" icon={<ICONS.Dashboard />} label="پیشخوان مدیریتی" onClick={() => setIsSidebarOpen(false)} />
-            <SidebarLink to="/register" icon={<ICONS.Check />} label="ثبت چک بانکی" onClick={() => setIsSidebarOpen(false)} />
-            <SidebarLink to="/list" icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>} label="بانک اطلاعات چک‌ها" onClick={() => setIsSidebarOpen(false)} />
+            <SidebarLink to="/" icon={<ICONS.Dashboard />} label="داشبورد امنیتی" onClick={() => setIsSidebarOpen(false)} />
+            <SidebarLink to="/register" icon={<ICONS.Check />} label="ثبت چک جدید" onClick={() => setIsSidebarOpen(false)} />
+            <SidebarLink to="/list" icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>} label="بانک اطلاعات" onClick={() => setIsSidebarOpen(false)} />
             <div className="pt-4 pb-2 px-4">
                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">پیکربندی</span>
             </div>
-            <SidebarLink to="/settings" icon={<ICONS.Settings />} label="تنظیمات و امنیت" onClick={() => setIsSidebarOpen(false)} />
+            <SidebarLink to="/settings" icon={<ICONS.Settings />} label="تنظیمات بات و امنیت" onClick={() => setIsSidebarOpen(false)} />
           </nav>
           <div className="p-4 border-t border-slate-100">
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-black text-sm">
               <ICONS.Logout />
-              <span>خروج امن</span>
+              <span>خروج امن از سشن</span>
             </button>
           </div>
         </aside>
@@ -152,26 +163,18 @@ const App: React.FC = () => {
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Secure Admin Core</span>
+                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Verified Admin Access</span>
                 <span className="text-sm font-black text-slate-700">{user?.username}</span>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black border border-emerald-100">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                دیتابیس رمزنگاری شده
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black border border-indigo-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                دیتابیس رمزنگاری شده فعال
               </div>
-              <button onClick={() => setIsNotifOpen(!isNotifOpen)} className={`relative p-2.5 rounded-xl transition-all ${isNotifOpen ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
-                {notifications.filter(n => !n.isRead).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 border-2 border-white text-white text-[9px] font-black rounded-full flex items-center justify-center animate-bounce">
-                    {notifications.filter(n => !n.isRead).length}
-                  </span>
-                )}
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-              </button>
               <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden border border-slate-300">
-                <img src={`https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff&bold=true`} alt="Avatar" />
+                <img src={`https://ui-avatars.com/api/?name=Admin&background=4f46e5&color=fff&bold=true`} alt="Avatar" />
               </div>
             </div>
           </header>
@@ -198,7 +201,7 @@ const SidebarLink: React.FC<{ to: string, icon: React.ReactNode, label: string, 
     <Link 
       to={to} 
       onClick={onClick}
-      className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-50'}`}
+      className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-600 hover:bg-slate-50'}`}
     >
       <span className={isActive ? 'text-white' : 'text-slate-400'}>{icon}</span>
       <span className="font-black text-sm">{label}</span>
