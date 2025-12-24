@@ -12,35 +12,36 @@
             font-family: 'Vazirmatn', sans-serif;
             background-color: #f8fafc;
         }
-        /* Custom scrollbar for banking-style aesthetics */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
-<script type="importmap">
+    <!-- Shim for process.env to prevent white screen in browser -->
+    <script>
+      window.process = {
+        env: {
+          API_KEY: "" // این مقدار توسط سرور یا بیلد جایگزین می‌شود
+        }
+      };
+    </script>
+    <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "recharts": "https://esm.sh/recharts@2.12.7",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.22.3",
+    "@google/genai": "https://esm.sh/@google/genai@1.34.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "recharts": "https://esm.sh/recharts@^3.6.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
 </head>
 <body class="overflow-x-hidden">
     <div id="root"></div>
+    <!-- ورود به برنامه -->
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>
