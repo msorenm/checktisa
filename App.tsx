@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import * as ReactRouterDOM from 'react-router-dom';
-const { HashRouter, Routes, Route, Link, useLocation } = ReactRouterDOM as any;
+const { HashRouter, Routes, Route, Link, useLocation, Navigate } = ReactRouterDOM as any;
 
 import { ICONS, APP_NAME } from './constants';
 import { Check, CheckStatus, User, Notification, CheckHistoryEntry, TelegramConfig } from './types';
@@ -10,48 +10,45 @@ import RegisterCheck from './pages/RegisterCheck';
 import CheckList from './pages/CheckList';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import { SecureDB } from './services/storageService';
 import { 
   sendTelegramMessage, 
   formatNewCheckMessage 
 } from './services/telegramService';
 
 const App: React.FC = () => {
-  // بازیابی وضعیت احراز هویت از حافظه برای جلوگیری از خروج با رفرش
+  // بارگذاری داده‌ها از دیتابیس رمزنگاری شده
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('tisa_auth') === 'true';
+    return SecureDB.load('auth_status') === true;
   });
   
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('tisa_user');
-    return saved ? JSON.parse(saved) : null;
+    return SecureDB.load('user_profile');
   });
 
   const [checks, setChecks] = useState<Check[]>(() => {
-    const saved = localStorage.getItem('tisa_checks');
-    return saved ? JSON.parse(saved) : [];
+    return SecureDB.load('checks_master') || [];
   });
 
   const [notifications, setNotifications] = useState<Notification[]>(() => {
-    const saved = localStorage.getItem('tisa_notifs');
-    return saved ? JSON.parse(saved) : [];
+    return SecureDB.load('notifs_stream') || [];
   });
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // همگام‌سازی دائمی با LocalStorage در صورت تغییر هر وضعیت
+  // همگام‌سازی خودکار و رمزنگاری شده با هر تغییر
   useEffect(() => {
-    localStorage.setItem('tisa_checks', JSON.stringify(checks));
+    SecureDB.save('checks_master', checks);
   }, [checks]);
 
   useEffect(() => {
-    localStorage.setItem('tisa_notifs', JSON.stringify(notifications));
+    SecureDB.save('notifs_stream', notifications);
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem('tisa_auth', isAuthenticated.toString());
-    if (user) localStorage.setItem('tisa_user', JSON.stringify(user));
-    else localStorage.removeItem('tisa_user');
+    SecureDB.save('auth_status', isAuthenticated);
+    SecureDB.save('user_profile', user);
   }, [isAuthenticated, user]);
 
   const dispatchTelegram = useCallback((message: string) => {
@@ -68,7 +65,7 @@ const App: React.FC = () => {
           fromStatus: c.status,
           toStatus: status,
           timestamp: new Date().toLocaleString('fa-IR'),
-          userId: user?.username || 'کاربر'
+          userId: user?.username || 'مدیر'
         };
         return { ...c, status, history: [historyEntry, ...c.history] };
       }
@@ -98,22 +95,23 @@ const App: React.FC = () => {
     if (user) {
       const updatedUser = { ...user, telegram: config };
       setUser(updatedUser);
-      // بلافاصله در استوریج ذخیره می‌شود به دلیل useEffect بالا
+      // ذخیره آنی در دیتابیس رمزنگاری شده
+      SecureDB.save('user_profile', updatedUser);
     }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUser(null);
-    localStorage.removeItem('tisa_auth');
-    localStorage.removeItem('tisa_user');
+    SecureDB.clear();
+    window.location.reload();
   };
 
   if (!isAuthenticated) return <Login onLogin={(u) => { setIsAuthenticated(true); setUser(u); }} />;
 
   return (
     <HashRouter>
-      <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden" dir="rtl">
+      <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-['Vazirmatn']" dir="rtl">
         
         {isSidebarOpen && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
@@ -126,20 +124,23 @@ const App: React.FC = () => {
         `}>
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">T</div>
-              <h1 className="text-lg font-bold text-indigo-900">{APP_NAME}</h1>
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-100">T</div>
+              <h1 className="text-lg font-black text-indigo-900">{APP_NAME}</h1>
             </div>
           </div>
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            <SidebarLink to="/" icon={<ICONS.Dashboard />} label="پیشخوان" onClick={() => setIsSidebarOpen(false)} />
-            <SidebarLink to="/register" icon={<ICONS.Check />} label="ثبت چک" onClick={() => setIsSidebarOpen(false)} />
-            <SidebarLink to="/list" icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>} label="لیست چک‌ها" onClick={() => setIsSidebarOpen(false)} />
-            <SidebarLink to="/settings" icon={<ICONS.Settings />} label="تنظیمات" onClick={() => setIsSidebarOpen(false)} />
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            <SidebarLink to="/" icon={<ICONS.Dashboard />} label="پیشخوان مدیریتی" onClick={() => setIsSidebarOpen(false)} />
+            <SidebarLink to="/register" icon={<ICONS.Check />} label="ثبت چک بانکی" onClick={() => setIsSidebarOpen(false)} />
+            <SidebarLink to="/list" icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>} label="بانک اطلاعات چک‌ها" onClick={() => setIsSidebarOpen(false)} />
+            <div className="pt-4 pb-2 px-4">
+               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">پیکربندی</span>
+            </div>
+            <SidebarLink to="/settings" icon={<ICONS.Settings />} label="تنظیمات و امنیت" onClick={() => setIsSidebarOpen(false)} />
           </nav>
           <div className="p-4 border-t border-slate-100">
-            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-bold text-sm">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors font-black text-sm">
               <ICONS.Logout />
-              <span>خروج از سامانه</span>
+              <span>خروج امن</span>
             </button>
           </div>
         </aside>
@@ -151,22 +152,26 @@ const App: React.FC = () => {
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Enterprise Mode</span>
+                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Secure Admin Core</span>
                 <span className="text-sm font-black text-slate-700">{user?.username}</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button onClick={() => setIsNotifOpen(!isNotifOpen)} className={`relative p-2 rounded-xl transition-all ${isNotifOpen ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black border border-emerald-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                دیتابیس رمزنگاری شده
+              </div>
+              <button onClick={() => setIsNotifOpen(!isNotifOpen)} className={`relative p-2.5 rounded-xl transition-all ${isNotifOpen ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
                 {notifications.filter(n => !n.isRead).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 border-2 border-white text-white text-[9px] font-black rounded-full flex items-center justify-center animate-bounce">
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 border-2 border-white text-white text-[9px] font-black rounded-full flex items-center justify-center animate-bounce">
                     {notifications.filter(n => !n.isRead).length}
                   </span>
                 )}
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
               </button>
-              <div className="w-8 h-8 rounded-xl bg-slate-200 overflow-hidden border border-slate-300">
-                <img src={`https://picsum.photos/seed/${user?.id}/100/100`} alt="Avatar" />
+              <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden border border-slate-300">
+                <img src={`https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff&bold=true`} alt="Avatar" />
               </div>
             </div>
           </header>
@@ -177,21 +182,9 @@ const App: React.FC = () => {
               <Route path="/register" element={<RegisterCheck onAdd={handleAddCheck} />} />
               <Route path="/list" element={<CheckList checks={checks} onUpdateStatus={handleUpdateStatus} />} />
               <Route path="/settings" element={<Settings user={user} onUpdateTelegram={handleUpdateTelegram} />} />
+              <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </div>
-
-          {isNotifOpen && (
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[60] flex justify-end" onClick={() => setIsNotifOpen(false)}>
-              <div className="w-full sm:w-[400px] bg-white h-full shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
-                   <h3 className="font-black">اعلانات سیستم</h3>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {notifications.length === 0 ? <p className="text-center py-20 text-slate-400 text-sm">پیامی وجود ندارد</p> : null}
-                </div>
-              </div>
-            </div>
-          )}
         </main>
       </div>
     </HashRouter>
@@ -205,10 +198,10 @@ const SidebarLink: React.FC<{ to: string, icon: React.ReactNode, label: string, 
     <Link 
       to={to} 
       onClick={onClick}
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isActive ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-50'}`}
+      className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-50'}`}
     >
       <span className={isActive ? 'text-white' : 'text-slate-400'}>{icon}</span>
-      <span className="font-bold text-sm">{label}</span>
+      <span className="font-black text-sm">{label}</span>
     </Link>
   );
 };
