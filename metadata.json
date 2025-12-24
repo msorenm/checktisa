@@ -1,0 +1,8 @@
+{
+  "name": "Tisa – سامانه فوق‌پیشرفته مدیریت چک",
+  "description": "An enterprise-grade, banking-standard check management system with RTL support, Jalali calendar, and advanced Gemini-powered AI features including OCR, voice assistance, and fraud detection.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
